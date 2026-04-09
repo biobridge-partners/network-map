@@ -321,13 +321,13 @@ function importance(d){
 let fContribs = new Set(RAW.contributors);
 let fScores   = new Set(["Trusted","Warm","Cold"]);
 let fSen      = new Set(["Senior","Mid","Junior","Unknown"]);
-let fPri      = new Set([...RAW.priority_companies,"__other__","__all__"]);
+let fPri      = new Set([...RAW.priority_companies,"__other__"]);
 let fSearch   = "";
 
 // Pending (staged but not committed)
 let pendingContribs = new Set(RAW.contributors);
 let pendingSen      = new Set(["Senior","Mid","Junior","Unknown"]);
-let pendingPri      = new Set([...RAW.priority_companies,"__other__","__all__"]);
+let pendingPri      = new Set([...RAW.priority_companies,"__other__"]);
 
 // - Contact visibility -
 function isVisible(c){
@@ -339,16 +339,19 @@ function isVisible(c){
   // specific priority company names = show only contacts at those companies
   // __other__ = show contacts at NON-priority companies
   // combinations are OR within the priority filter, AND with all other filters
-  if(!fPri.has("__all__")){
-    const selectedPriNames=[...fPri].filter(p=>p!=="__all__"&&p!=="__other__");
+  // Priority filter: if nothing selected → show nothing for this dimension
+  // "Show all" state = all priority companies checked + __other__ checked
+  {
+    const selectedPriNames=[...fPri].filter(p=>p!=="__other__");
     const wantsOther=fPri.has("__other__");
-    const isPriContact=c.is_priority;
-    const matchesNamedPri=isPriContact && selectedPriNames.some(p=>c.company===p);
-    const matchesOther=!isPriContact && wantsOther;
-    // Also: if a priority company is selected, contacts AT that company pass
-    // even if they're somehow not flagged is_priority (data edge case)
-    const companyNameMatch=selectedPriNames.some(p=>c.company===p);
-    if(!matchesNamedPri && !matchesOther && !companyNameMatch) return false;
+    // If filter is in full "show all" state, skip entirely
+    const allPriSelected=RAW.priority_companies.every(p=>fPri.has(p));
+    if(!(allPriSelected && wantsOther)){
+      // Filter is active — apply it
+      const matchesNamedPri=selectedPriNames.some(p=>c.company===p);
+      const matchesOther=!c.is_priority && wantsOther;
+      if(!matchesNamedPri && !matchesOther) return false;
+    }
   }
   if(fSearch){
     const t=fSearch.toLowerCase();
@@ -454,17 +457,16 @@ function updateSenLabel(){
     n===4?"All":n===0?"None":[...fSen].join(", ");
 }
 function updatePriLabel(){
-  const priItems=[...RAW.priority_companies,"__other__"];
-  const n=fPri.size-(fPri.has("__all__")?1:0);
-  const t=priItems.length;
+  const t=RAW.priority_companies.length+1; // +1 for __other__
+  const n=fPri.size;
   let lbl;
-  if(fPri.has("__all__")||n>=t) lbl="All accounts";
+  if(n>=t) lbl="All accounts";
   else if(n===0) lbl="None";
   else{
-    const names=[...fPri].filter(x=>x!=="__all__"&&x!=="__other__");
-    lbl = names.length===1?names[0]:
-          fPri.has("__other__")&&names.length===0?"Other":
-          `${n} selected`;
+    const names=[...fPri].filter(x=>x!=="__other__");
+    if(names.length===0) lbl="Other";
+    else if(names.length===1) lbl=names[0];
+    else lbl=`${n} selected`;
   }
   document.getElementById("pri-lbl").textContent=lbl;
 }
